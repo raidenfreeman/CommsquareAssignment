@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>SO Query Results</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+          integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <style>
+        .hide {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.1.0/rxjs.umd.js"></script>
+<script src="https://momentjs.com/downloads/moment.js"></script>
+
+<nav class="navbar navbar-dark bg-dark">
+
+    <div class="input-group" style="justify-content: center;">
+        <input id="searchBox" style="min-width: 10em; max-width: 20em;" class="form-control mr-sm-2" type="search"
+               placeholder="Search the table..." aria-label="Search">
+        <div class="input-group-append">
+            <span class="input-group-text" id="basic-addon1">🔍</span>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-10">
+
+
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered table-striped">
+                    <thead>
+                    <tr id="headerRow">
+                        <th scope="col">Name</th>
+                        <th scope="col">Title</th>
+                        <th scope="col">Creation Date</th>
+                        <th scope="col">Is Answered?</th>
+                        <th scope="col">Views</th>
+                        <th scope="col">Score</th>
+                        <th scope="col">Link</th>
+                    </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card" style="margin:auto; margin-top: 3rem; width: 18rem;">
+                <div class="card-header">
+                    Statistics
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Questions
+                        <span class="badge badge-primary badge-pill" id="questionsBadge"></span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Answered Questions
+                        <span class="badge badge-primary badge-pill" id="answeredBadge"></span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Average Answered Questions
+                        <span class="badge badge-primary badge-pill" id="avgAnsweredBadge"></span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Average Views
+                        <span class="badge badge-primary badge-pill" id="avgViewsBadge"></span>
+                    </li>
+
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    window.onload = () => {
+        const tableBody = document.getElementById('tableBody');
+        const momentFormatString = 'MMM/D/YYYY  hh:mm';
+        // IIFE for scoping
+        (function () {
+            // Build an XHR
+            const xmlhttp = new XMLHttpRequest();
+            const url = 'data'; // at the 'data/' JSON endpoint
+            xmlhttp.onreadystatechange = handleXHR;
+
+            function handleXHR() {
+                if (this.readyState == 4 && this.status == 200) {
+
+                    const responseJSON = JSON.parse(this.responseText);
+                    const questionsArray = responseJSON.questionsArray || [];
+
+                    // Iterate over each question
+                    questionsArray.forEach(question => {
+                        // Add a table row for each question
+                        const row = tableBody.appendChild(document.createElement('tr'));
+                        // Transform every property of the question to an appropriate string
+                        for (let key in question) {
+                            if (question.hasOwnProperty(key)) { // skip inherited properties (inapplicable but w/e)
+                                // Add an element for each property
+                                let td = row.appendChild(document.createElement('td'));
+                                // Convert the value to string.
+                                let value = question[key].toString();
+
+                                // If it's a boolean, convert to YES/NO
+                                if (key === 'is_answered') {
+                                    value = question[key] ? 'YES' : 'NO';
+                                }
+                                // If it's a date, format it accordingly
+                                if (key === 'creation_date') {
+                                    value = moment(question[key] * 1000, 'x').format(momentFormatString); // multiply by 1000 to make it milliseconds
+                                }
+                                // If it's a hyperlink, add an anchor
+                                if (key === 'link') {
+                                    let anchor = document.createElement('a');
+                                    anchor.setAttribute('href', value);
+                                    // and only show the characters that change
+                                    anchor.appendChild(document.createTextNode(value.substring(35)));
+                                    td.appendChild(anchor);
+                                }
+                                else {
+                                    // if it's not an anchor, just add the text to the element
+                                    td.appendChild(document.createTextNode(value));
+                                }
+                                // mutate the external array, so that it's searchable and 1-1 with what the user sees
+                                question[key] = value;
+                            }
+                        }
+                    });
+                    const stats = responseJSON.stats;
+                    if (stats) {
+                        document.getElementById('questionsBadge').textContent = stats.totalQuestions;
+                        document.getElementById('answeredBadge').textContent = stats.totalAnsweredQuestions;
+                        document.getElementById('avgAnsweredBadge').textContent = stats.avgAnswers.toFixed(1);
+                        document.getElementById('avgViewsBadge').textContent = stats.avgViews.toFixed(1);
+                    }
+                }
+            }
+
+            xmlhttp.open('GET', url, true);
+            xmlhttp.send(); // perform the XHR
+            // TODO: Should retry the request with increasing delays for a fixed amount of tries
+        })();
+
+
+        // Sorting
+        (function () {
+                const tableHeaders = document.getElementById('headerRow').childNodes || [];
+
+                // Subscribe to each header's click event
+                tableHeaders.forEach(element =>
+                    rxjs.fromEvent(element, 'click')
+                        .subscribe(event => {
+                                const element = event.target;
+                                const isSortedAscending = element.textContent.endsWith(' 🔺');
+                                // Clear the ascending/descending markers from all headers
+                                tableHeaders.forEach(th => {
+                                    th.textContent = th.textContent.replace(' 🔺', '');
+                                    th.textContent = th.textContent.replace(' 🔻', '');
+                                });
+                                // If it's sorted ascending
+                                if (isSortedAscending) {
+                                    // sort it descending
+                                    element.textContent = element.textContent.concat(' 🔻');
+                                    sortTableBy(element, -1);
+                                }
+                                else {
+                                    // if it's sorted descending, or unsorted,
+                                    // sort it ascending
+                                    element.textContent = element.textContent.concat(' 🔺');
+                                    sortTableBy(element, 1);
+                                }
+                            }
+                        ));
+
+                function sortTableBy(headerElement, ascending) {
+                    // Get the column number by finding the index among siblings
+                    const columnNumber = [...headerElement.parentNode.children].indexOf(headerElement);
+
+                    // get the rows of the table as an array
+                    const rows = [...tableBody.rows];
+
+                    // sort the rows array
+                    // if ascending is <0 the sorting is reversed
+                    rows.sort((x, y) => ascending * compareCells(columnNumber, x, y));
+
+                    // place them on the table in the sorted order
+                    rows.forEach(row => tableBody.appendChild(row));
+                }
+
+                // Return a positive or negative value, depending on the cell contents
+                function compareCells(column, x, y) {
+                    // remove blank spaces
+                    const xContents = x.cells[column].textContent.trim();
+                    const yContents = y.cells[column].textContent.trim();
+                    // For dates
+                    if (column === 2) {
+                        const momentX = moment(xContents, momentFormatString);
+                        const momentY = moment(yContents, momentFormatString);
+                        return momentX.isBefore(momentY) ? -1 : 1;
+                    }
+                    // For numbers (we could also parse everything and handle NaN)
+                    if (column === 4 || column === 5) {
+                        return parseInt(xContents, 10) < parseInt(yContents, 10) ? -1 : 1;
+                    }
+                    // If they're just strings, use localceCompare. Zeros are ok (they are equal->unsorted)
+                    return xContents.localeCompare(yContents);
+                }
+            }
+        )();
+
+        // Searching
+        (function () {
+            // Create an observable that emits when the user
+            // types anything in the searchbox
+            const source = rxjs.fromEvent(document.getElementById('searchBox'), 'input');
+            source.pipe(
+                rxjs.operators.debounceTime(400), // wait to stop typing for 400ms
+                rxjs.operators.distinctUntilChanged(), // if nothing has changed, don't emit
+                rxjs.operators.map(event => event.srcElement.value) // emit the value of the searchbox
+            ).subscribe(searchString => {
+                    // In case that we get the empty string,
+                    // it's a substring of everything,
+                    // so we don't need to handle it.
+                    [...tableBody.rows].forEach(row => {
+                            const didAnyPropertyMatch = [...row.childNodes]
+                                .some(node =>
+                                    node.textContent
+                                        .toLowerCase()
+                                        .includes(searchString.toLowerCase()));
+                            // Ιf any property matched the string
+                            if (didAnyPropertyMatch) {
+                                // Show the question
+                                row.classList.remove('hide');
+                            }
+                            else {
+                                // If none matched, hide it
+                                row.classList.add('hide');
+                            }
+                            // It's imperative that the table body is empty
+                            // Because otherwise, the index of the child nodes,
+                            // won't match the questions index
+                        }
+                    )
+                }
+            ); // We don't unsubscribe, because we assume it's on for the lifespan of the page
+        })();
+    };
+</script>
+</body>
+</html>
+
